@@ -47,8 +47,8 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 readme = "README.md"
-homepage = "https://github.com/Opus10/django-pglock"
-repository = "https://github.com/Opus10/django-pglock"
+homepage = "https://github.com/AmbitionEng/django-pglock"
+repository = "https://github.com/AmbitionEng/django-pglock"
 documentation = "https://django-pglock.readthedocs.io"
 
 [tool.poetry.dependencies]
