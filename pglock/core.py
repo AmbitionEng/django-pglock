@@ -453,7 +453,7 @@ def model(
     mode: str = ACCESS_EXCLUSIVE,
     using: str = DEFAULT_DB_ALIAS,
     timeout: int | float | dt.timedelta | _Unset | None = _unset,
-    side_effect: _ModelSideEffect | None = None,
+    side_effect: _ModelSideEffect = Return,
 ) -> bool:
     """Lock model(s).
 
