@@ -7,13 +7,13 @@ import hashlib
 import inspect
 import threading
 from collections.abc import Callable, Generator
-from typing import TYPE_CHECKING, Any, Final, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Final, TypeVar, Union, overload
 
 import pgactivity
 from django.apps import apps
 from django.db import DEFAULT_DB_ALIAS, connections, models, transaction
 from django.db.utils import OperationalError
-from typing_extensions import ParamSpec
+from typing_extensions import ParamSpec, TypeAlias, TypedDict, Unpack
 
 from pglock import utils
 
@@ -33,6 +33,9 @@ else:
 
 _R = TypeVar("_R")
 _P = ParamSpec("_P")
+
+_AdvisorySideEffect: TypeAlias = "type[Return] | type[Raise] | type[Skip] | Return | Raise | Skip"
+_ModelSideEffect: TypeAlias = "type[Return] | type[Raise] | Return | Raise"
 
 # Lock levels
 ACCESS_SHARE: Final = "ACCESS SHARE"
@@ -108,12 +111,38 @@ def _is_transaction_errored(cursor):
         raise AssertionError
 
 
+class _TimeDeltaKwargs(TypedDict):
+    days: float
+    seconds: float
+    microseconds: float
+    milliseconds: float
+    minutes: float
+    hours: int
+    weeks: float
+
+
+@overload
+@contextlib.contextmanager
+def lock_timeout(
+    timeout: dt.timedelta | int | float | _Unset | None = _unset, *, using: str = DEFAULT_DB_ALIAS
+) -> Generator[None]: ...
+
+
+@overload
+@contextlib.contextmanager
+def lock_timeout(
+    *,
+    using: str = DEFAULT_DB_ALIAS,
+    **timedelta_kwargs: Unpack[_TimeDeltaKwargs],
+) -> Generator[None]: ...
+
+
 @contextlib.contextmanager
 def lock_timeout(
     timeout: dt.timedelta | int | float | _Unset | None = _unset,
     *,
     using: str = DEFAULT_DB_ALIAS,
-    **timedelta_kwargs: int,
+    **timedelta_kwargs: Unpack[_TimeDeltaKwargs],
 ) -> Generator[None]:
     """Set the lock timeout as a decorator or context manager.
 
@@ -185,7 +214,7 @@ def _cast_lock_id(lock_id):
         raise TypeError(f'Lock ID "{lock_id}" is not a string or int')
 
 
-def advisory_id(lock_id: Union[str, int]) -> Tuple[int, int]:
+def advisory_id(lock_id: Union[str, int]) -> tuple[int, int]:
     """
     Given a lock ID, return the (classid, objid) tuple that Postgres uses
     for the advisory lock in the pg_locks table,
@@ -223,6 +252,7 @@ class advisory(contextlib.ContextDecorator):
             `None`, an infinite timeout will be used. When
             using a timeout, the acquisition status will be returned when running as a context
             manager. Use the `side_effect` argument to change the runtime behavior.
+            If let unset, defaults to the current `lock_timeout` Postgres configuration parameter.
         side_effect (type[SideEffect] | SideEffect | None): Adjust the runtime behavior when using a timeout.
             `pglock.Return` will return the acquisition status when using the context manager.
             `pglock.Raise` will raise a `django.db.utils.OperationalError` if the lock cannot
@@ -246,7 +276,7 @@ class advisory(contextlib.ContextDecorator):
         xact: bool = False,
         using: str = DEFAULT_DB_ALIAS,
         timeout: float | dt.timedelta | _Unset | None = _unset,
-        side_effect: type[SideEffect] | SideEffect | None = None,
+        side_effect: _AdvisorySideEffect | None = None,
     ) -> None:
         """Acquire an advisory lock"""
         self.lock_id = lock_id
@@ -318,6 +348,17 @@ class advisory(contextlib.ContextDecorator):
             )
 
     def acquire(self) -> bool:
+        """Acquire an advisory lock, returning the lock status.
+
+        Raises:
+            ValueError: When:
+                - `side_effect` is not one of `pglock.Return`, `pglock.Raise`, or `pglock.Skip`.
+                - `side_effect` is `pglock.Skip` and the lock is being acquired as a decorator.
+                - `lock_id` is not supplied.
+            RuntimeError: When acquiring outside of a transaction for `xact=True`.
+            django.db.utils.OperationalError: When a lock cannot be acquired or a timeout happens
+                when `side_effect=pglock.Raise`.
+        """
         self._process_runtime_parameters()
 
         if self.xact and not self.in_transaction():
@@ -356,6 +397,11 @@ class advisory(contextlib.ContextDecorator):
         return acquired
 
     def release(self) -> None:
+        """Release an advisory lock.
+
+        Raises:
+            RuntimeError: When releasing a lock with `xact=True`.
+        """
         if self.xact:
             raise RuntimeError("Advisory locks with xact=True cannot be manually released.")
 
@@ -407,7 +453,7 @@ def model(
     mode: str = ACCESS_EXCLUSIVE,
     using: str = DEFAULT_DB_ALIAS,
     timeout: int | float | dt.timedelta | _Unset | None = _unset,
-    side_effect: type[SideEffect] | SideEffect = Return,
+    side_effect: _ModelSideEffect = Return,
 ) -> bool:
     """Lock model(s).
 
