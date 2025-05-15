@@ -35,7 +35,8 @@ _R = TypeVar("_R")
 _P = ParamSpec("_P")
 
 _AdvisorySideEffect: TypeAlias = "type[Return] | type[Raise] | type[Skip] | Return | Raise | Skip"
-_ModelSideEffect: TypeAlias = "type[Return] | type[Raise] | Return | Raise "
+_ModelSideEffect: TypeAlias = "type[Return] | type[Raise] | Return | Raise"
+
 # Lock levels
 ACCESS_SHARE: Final = "ACCESS SHARE"
 ROW_SHARE: Final = "ROW SHARE"
@@ -81,8 +82,6 @@ class Skip(SideEffect):
     """
 
 
-
-
 def _cast_timeout(timeout):
     if timeout is not None and timeout is not _unset:
         if isinstance(timeout, (int, float)):
@@ -95,7 +94,6 @@ def _cast_timeout(timeout):
             timeout = dt.timedelta()
 
     return timeout
-        
 
 
 def _is_transaction_errored(cursor):
@@ -170,8 +168,7 @@ def lock_timeout(
     """
     if timedelta_kwargs:
         timeout = dt.timedelta(**timedelta_kwargs)
-
-    if type(timeout) is _Unset:
+    elif timeout is _unset:
         raise ValueError("Must supply a value to pglock.timeout")
 
     if timeout is not None:
