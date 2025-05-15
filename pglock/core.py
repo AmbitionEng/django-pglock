@@ -259,7 +259,7 @@ class advisory(contextlib.ContextDecorator):
             `pglock.Raise` will raise a `django.db.utils.OperationalError` if the lock cannot
             be acquired or a timeout happens. `pglock.Skip` will skip decoratored code if the
             lock cannot be acquired. Defaults to `pglock.Return` when used as a context manager
-            or `pglock.Raise` when used as a decorator (or when set to `None`).
+            or `pglock.Raise` when used as a decorator.
 
     Raises:
         django.db.utils.OperationalError: When a lock cannot be acquired or a timeout happens
