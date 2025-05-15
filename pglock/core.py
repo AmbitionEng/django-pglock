@@ -13,7 +13,7 @@ import pgactivity
 from django.apps import apps
 from django.db import DEFAULT_DB_ALIAS, connections, models, transaction
 from django.db.utils import OperationalError
-from typing_extensions import ParamSpec, TypedDict, Unpack, TypeAlias
+from typing_extensions import ParamSpec, TypeAlias, TypedDict, Unpack
 
 from pglock import utils
 
@@ -124,10 +124,9 @@ class _TimeDeltaKwargs(TypedDict):
 @overload
 @contextlib.contextmanager
 def lock_timeout(
-    timeout: dt.timedelta | int | float | _Unset | None = _unset,
-    *,
-    using: str = DEFAULT_DB_ALIAS
+    timeout: dt.timedelta | int | float | _Unset | None = _unset, *, using: str = DEFAULT_DB_ALIAS
 ) -> Generator[None]: ...
+
 
 @overload
 @contextlib.contextmanager
@@ -350,14 +349,15 @@ class advisory(contextlib.ContextDecorator):
 
     def acquire(self) -> bool:
         """Acquire an advisory lock, returning the lock status.
-        
+
         Raises:
             ValueError: When:
                 - `side_effect` is not one of `pglock.Return`, `pglock.Raise`, or `pglock.Skip`.
                 - `side_effect` is `pglock.Skip` and the lock is being acquired as a decorator.
                 - `lock_id` is not supplied.
             RuntimeError: When acquiring outside of a transaction for `xact=True`.
-            django.db.utils.OperationalError: When a lock cannot be acquired when `side_effect=pglock.Raise`.
+            django.db.utils.OperationalError: When a lock cannot be acquired or a timeout happens
+                when `side_effect=pglock.Raise`.
         """
         self._process_runtime_parameters()
 
@@ -398,7 +398,7 @@ class advisory(contextlib.ContextDecorator):
 
     def release(self) -> None:
         """Release an advisory lock.
-        
+
         Raises:
             RuntimeError: When releasing a lock with `xact=True`.
         """
