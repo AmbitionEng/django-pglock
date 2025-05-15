@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.2 (2025-5-15)
+
+#### Changes
+
+  - Minor typing and docstring improvements by [@maxmuoto](https://github.com/maxmuoto) in [#18](https://github.com/AmbitionEng/django-pglock/pull/18).
+
 ## 1.7.1 (2024-12-15)
 
 #### Changes
