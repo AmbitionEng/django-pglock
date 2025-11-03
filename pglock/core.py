@@ -5,9 +5,10 @@ import datetime as dt
 import functools
 import hashlib
 import inspect
+import struct
 import threading
 from collections.abc import Callable, Generator
-from typing import TYPE_CHECKING, Any, Final, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Any, Final, Iterable, TypeVar, Union, overload
 
 import pgactivity
 from django.apps import apps
@@ -226,6 +227,10 @@ def advisory_id(lock_id: Union[str, int]) -> tuple[int, int]:
         The (classid, objid) tuple
     """
     lock_id = _cast_lock_id(lock_id)
+    if lock_id < 0:
+        # cast to signed - since pg_locks is using oid (u32).
+        unsigned: int = struct.unpack("L", struct.pack("l", lock_id))[0]
+        lock_id = unsigned
     return lock_id >> 32, lock_id & 0xFFFFFFFF
 
 
@@ -308,6 +313,13 @@ class advisory(contextlib.ContextDecorator):
                 if self._acquired or self.side_effect != Skip:
                     return func(*args, **kwargs)
 
+        if not self.lock_id and self._func:
+            module = inspect.getmodule(self._func)
+            int_lock_id = _cast_lock_id(f"{module.__name__}.{self._func.__name__}")
+        else:
+            int_lock_id = self.int_lock_id
+        # unwrap to handle other wrapping decorators - such as celery.shared_task
+        utils._unwrap_func(func)._pglock_advisory_id = int_lock_id  # type: ignore[reportFunctionMemberAccess]
         return inner
 
     def _process_runtime_parameters(self) -> None:
@@ -365,9 +377,9 @@ class advisory(contextlib.ContextDecorator):
             raise RuntimeError("Must be in a transaction to use xact=True.")
 
         acquire_sql = (
-            f'pg{"_try" if self.nowait else ""}_advisory'
-            f'{"_xact" if self.xact else ""}_lock'
-            f'{"_shared" if self.shared else ""}'
+            f"pg{'_try' if self.nowait else ''}_advisory"
+            f"{'_xact' if self.xact else ''}_lock"
+            f"{'_shared' if self.shared else ''}"
         )
         sql = f"SELECT {acquire_sql}({self.int_lock_id})"
 
@@ -406,8 +418,57 @@ class advisory(contextlib.ContextDecorator):
             raise RuntimeError("Advisory locks with xact=True cannot be manually released.")
 
         with connections[self.using].cursor() as cursor:
-            release_sql = f'pg_advisory_unlock{"_shared" if self.shared else ""}'
+            release_sql = f"pg_advisory_unlock{'_shared' if self.shared else ''}"
             cursor.execute(f"SELECT {release_sql}({self.int_lock_id})")
+
+    @classmethod
+    def is_locked(cls, lock_id: int | str | Callable, using: str = DEFAULT_DB_ALIAS) -> bool:
+        """Checks if lock is currently acquired.
+
+        Supports passing a callable that has been decorated by `pglock.advisory`.
+        If callable is decorated by multiple pglock.advisory - only inner lock is checked.
+
+        Raises:
+            TypeError: When: `lock_id` is not supplied.
+            RuntimeError: When callable is passed that's not wrapped by `pglock.advisory`.
+        """
+        return cls.bulk_is_locked((lock_id,), using=using)[0]
+
+    @classmethod
+    def bulk_is_locked(
+        cls,
+        lock_ids: Iterable[int | str | Callable],
+        using: str = DEFAULT_DB_ALIAS,
+    ) -> list[bool]:
+        """Checks if locks are currently acquired.
+
+        Supports passing a callables that has been decorated by `pglock.advisory`.
+        If callable is decorated by multiple pglock.advisory - only inner lock is checked.
+
+        Raises:
+            TypeError: When: any value from `lock_ids` is not supplied.
+            RuntimeError: When any callable in `lock_ids` is not wrapped by `pglock.advisory`.
+        """
+        check_lock_ids: list[tuple[int, int]] = []
+        for lock_id in lock_ids:
+            if callable(lock_id):
+                stored_lock_id = getattr(utils._unwrap_func(lock_id), "_pglock_advisory_id", None)
+                if stored_lock_id is None:
+                    raise RuntimeError(f"Callable {lock_id} is not wrapped by pglock.advisory")
+                check_lock_ids.append(advisory_id(stored_lock_id))
+            else:
+                check_lock_ids.append(advisory_id(lock_id))
+
+        sql = (
+            "SELECT classid, objid FROM pg_locks WHERE locktype = 'advisory'"
+            " AND classid = ANY(%s) AND objid = ANY(%s)"
+        )
+        pg_classid = [lock_id[0] for lock_id in check_lock_ids]
+        pg_objid = [lock_id[1] for lock_id in check_lock_ids]
+        with connections[using].cursor() as cursor:
+            cursor.execute(sql, (pg_classid, pg_objid))
+            are_locked: set[tuple[int, int]] = set(cursor.fetchall())
+        return [lock_id in are_locked for lock_id in check_lock_ids]
 
     def __enter__(self) -> bool:
         self._transaction_ctx = contextlib.ExitStack()
@@ -497,7 +558,7 @@ def model(
     nowait = isinstance(timeout, dt.timedelta) and not timeout
     models = [apps.get_model(model) if isinstance(model, str) else model for model in models]
     models = ", ".join(f'"{model._meta.db_table}"' for model in models)
-    sql = f'LOCK TABLE {models} IN {mode} MODE {"NOWAIT" if nowait else ""}'
+    sql = f"LOCK TABLE {models} IN {mode} MODE {'NOWAIT' if nowait else ''}"
 
     try:
         with contextlib.ExitStack() as stack:

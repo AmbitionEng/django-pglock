@@ -26,3 +26,9 @@ def pg_maj_version(cursor):
     """Return the major version of Postgres that's running"""
     version = getattr(cursor.connection, "server_version", cursor.connection.info.server_version)
     return int(str(version)[:-4])
+
+
+def _unwrap_func(func):
+    while hasattr(func, "__wrapped__"):
+        func = _unwrap_func(func.__wrapped__)
+    return func

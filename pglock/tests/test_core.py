@@ -1,4 +1,5 @@
 import datetime as dt
+import functools
 import random
 import threading
 
@@ -550,3 +551,106 @@ def test_prioritize_args():
     with pytest.raises(TypeError, match="must be an int"):
         with pglock.prioritize(interval="1"):
             pass
+
+
+@pytest.mark.django_db()
+def test_is_locked(reraise):
+    barrier_start = threading.Barrier(2)
+    barrier_hold = threading.Barrier(2)
+
+    @reraise.wrap
+    def hold_the_lock():
+        with pglock.advisory("test_is_locked"):
+            barrier_start.wait(timeout=5)
+            barrier_hold.wait(timeout=5)
+
+    @reraise.wrap
+    def assert_is_locked():
+        barrier_start.wait(timeout=5)
+        assert pglock.advisory.is_locked("test_is_locked")
+        barrier_hold.wait(timeout=5)
+
+    hold = threading.Thread(target=hold_the_lock)
+    is_locked = threading.Thread(target=assert_is_locked)
+    hold.start()
+    is_locked.start()
+    hold.join()
+    is_locked.join()
+
+
+@pytest.mark.django_db()
+def test_bulk_is_locked(reraise):
+    barrier_start = threading.Barrier(2)
+    barrier_hold = threading.Barrier(2)
+
+    @reraise.wrap
+    def hold_the_lock():
+        with pglock.advisory("test_is_locked_bulk"):
+            barrier_start.wait(timeout=5)
+            barrier_hold.wait(timeout=5)
+
+    @reraise.wrap
+    def assert_bulk_is_locked():
+        barrier_start.wait(timeout=5)
+        assert pglock.advisory.bulk_is_locked(
+            ["test_is_locked_bulk", "not_locked_dup", "not_locked_dup"]
+        ) == [True, False, False]
+        barrier_hold.wait(timeout=5)
+
+    hold = threading.Thread(target=hold_the_lock)
+    is_locked = threading.Thread(target=assert_bulk_is_locked)
+    hold.start()
+    is_locked.start()
+    hold.join()
+    is_locked.join()
+
+
+@pytest.mark.django_db()
+def test_is_locked_func(reraise):
+    barrier_start = threading.Barrier(2)
+    barrier_hold = threading.Barrier(2)
+
+    def other_wrapper(func):
+        @functools.wraps(func)
+        def inner(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        return inner
+
+    @other_wrapper
+    @pglock.advisory("other_lock")
+    @other_wrapper
+    @pglock.advisory()
+    @other_wrapper
+    def decorated_fn():
+        barrier_start.wait(timeout=5)
+        barrier_hold.wait(timeout=5)
+
+    @reraise.wrap
+    def hold_the_lock():
+        decorated_fn()
+
+    @reraise.wrap
+    def assert_is_locked():
+        barrier_start.wait(timeout=5)
+        assert pglock.advisory.bulk_is_locked([decorated_fn, "other_lock", "not_locked"]) == [
+            True,
+            True,
+            False,
+        ]
+        barrier_hold.wait(timeout=5)
+
+    hold = threading.Thread(target=hold_the_lock)
+    is_locked = threading.Thread(target=assert_is_locked)
+    hold.start()
+    is_locked.start()
+    hold.join()
+    is_locked.join()
+
+
+def test_is_locked_func_raises():
+    def foo():
+        pass
+
+    with pytest.raises(RuntimeError, match="not wrapped"):
+        pglock.advisory.is_locked(foo)
