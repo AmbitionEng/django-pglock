@@ -429,7 +429,7 @@ class advisory(contextlib.ContextDecorator):
         """Checks if lock is currently acquired.
 
         Supports passing a callable that has been decorated by `pglock.advisory`.
-        If callable is decorated by multiple pglock.advisory - 
+        If callable is decorated by multiple pglock.advisory -
         only outer (latest applied) lock is checked.
 
         Raises:
@@ -447,7 +447,7 @@ class advisory(contextlib.ContextDecorator):
         """Checks if locks are currently acquired.
 
         Supports passing a callables that has been decorated by `pglock.advisory`.
-        If callable is decorated by multiple pglock.advisory - 
+        If callable is decorated by multiple pglock.advisory -
         only outer (latest applied) lock is checked.
 
         Raises:
