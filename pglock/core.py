@@ -322,7 +322,7 @@ class advisory(contextlib.ContextDecorator):
         try:
             utils._unwrap_func(func)._pglock_advisory_id = int_lock_id  # type: ignore[reportFunctionMemberAccess]
         except AttributeError:
-            pass # handle slotted/frozen dataclasses, etc
+            pass  # handle slotted/frozen dataclasses, etc
         return inner
 
     def _process_runtime_parameters(self) -> None:
@@ -429,7 +429,8 @@ class advisory(contextlib.ContextDecorator):
         """Checks if lock is currently acquired.
 
         Supports passing a callable that has been decorated by `pglock.advisory`.
-        If callable is decorated by multiple pglock.advisory - only inner lock is checked.
+        If callable is decorated by multiple pglock.advisory - 
+        only outer (latest applied) lock is checked.
 
         Raises:
             TypeError: When: `lock_id` is not supplied.
@@ -446,7 +447,8 @@ class advisory(contextlib.ContextDecorator):
         """Checks if locks are currently acquired.
 
         Supports passing a callables that has been decorated by `pglock.advisory`.
-        If callable is decorated by multiple pglock.advisory - only inner lock is checked.
+        If callable is decorated by multiple pglock.advisory - 
+        only outer (latest applied) lock is checked.
 
         Raises:
             TypeError: When: any value from `lock_ids` is not supplied.
