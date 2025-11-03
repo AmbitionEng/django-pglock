@@ -655,6 +655,7 @@ def test_is_locked_func_raises():
     with pytest.raises(RuntimeError, match="not wrapped"):
         pglock.advisory.is_locked(foo)
 
+
 @pytest.mark.django_db()
 def test_decorator_slotted():
     class SlottedCallable:
