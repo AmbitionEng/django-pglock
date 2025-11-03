@@ -319,7 +319,10 @@ class advisory(contextlib.ContextDecorator):
         else:
             int_lock_id = self.int_lock_id
         # unwrap to handle other wrapping decorators - such as celery.shared_task
-        utils._unwrap_func(func)._pglock_advisory_id = int_lock_id  # type: ignore[reportFunctionMemberAccess]
+        try:
+            utils._unwrap_func(func)._pglock_advisory_id = int_lock_id  # type: ignore[reportFunctionMemberAccess]
+        except AttributeError:
+            pass # handle slotted/frozen dataclasses, etc
         return inner
 
     def _process_runtime_parameters(self) -> None:
