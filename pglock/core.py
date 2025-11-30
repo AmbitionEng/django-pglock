@@ -365,9 +365,9 @@ class advisory(contextlib.ContextDecorator):
             raise RuntimeError("Must be in a transaction to use xact=True.")
 
         acquire_sql = (
-            f'pg{"_try" if self.nowait else ""}_advisory'
-            f'{"_xact" if self.xact else ""}_lock'
-            f'{"_shared" if self.shared else ""}'
+            f"pg{'_try' if self.nowait else ''}_advisory"
+            f"{'_xact' if self.xact else ''}_lock"
+            f"{'_shared' if self.shared else ''}"
         )
         sql = f"SELECT {acquire_sql}({self.int_lock_id})"
 
@@ -406,7 +406,7 @@ class advisory(contextlib.ContextDecorator):
             raise RuntimeError("Advisory locks with xact=True cannot be manually released.")
 
         with connections[self.using].cursor() as cursor:
-            release_sql = f'pg_advisory_unlock{"_shared" if self.shared else ""}'
+            release_sql = f"pg_advisory_unlock{'_shared' if self.shared else ''}"
             cursor.execute(f"SELECT {release_sql}({self.int_lock_id})")
 
     def __enter__(self) -> bool:
@@ -497,7 +497,7 @@ def model(
     nowait = isinstance(timeout, dt.timedelta) and not timeout
     models = [apps.get_model(model) if isinstance(model, str) else model for model in models]
     models = ", ".join(f'"{model._meta.db_table}"' for model in models)
-    sql = f'LOCK TABLE {models} IN {mode} MODE {"NOWAIT" if nowait else ""}'
+    sql = f"LOCK TABLE {models} IN {mode} MODE {'NOWAIT' if nowait else ''}"
 
     try:
         with contextlib.ExitStack() as stack:
