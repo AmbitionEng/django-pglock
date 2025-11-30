@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0 (2025-11-30)
+
+#### Changes
+
+  - Drop Python 3.9 support, add Python 3.14 support, add Postgres 18 support, add Django 6.0 support by [@wesleykendall](https://github.com/wesleykendall) in [#21](https://github.com/AmbitionEng/django-pglock/pull/21)
+
 ## 1.7.2 (2025-5-15)
 
 #### Changes
